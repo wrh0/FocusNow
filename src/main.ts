@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, screen } from 'electron';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promises as fsPromises } from 'node:fs';
 import started from 'electron-squirrel-startup';
 import {
@@ -17,6 +18,8 @@ import { createTray } from './main/tray';
 import { getAppIconPath } from './main/paths';
 import { getSettings, getStore, setSetting } from './main/settings';
 import {
+  SOUND_EXTENSIONS,
+  SOUND_FILE_MAX_BYTES,
   assertInsideSoundsDir,
   clearSoundFiles,
   importSoundFile,
@@ -45,9 +48,28 @@ if (started) {
   app.quit();
 }
 
-// Windows 的系统通知需要 AppUserModelId 才能正确归属到应用显示,
-// 与 electron-forge 打包的默认 appId 保持一致(com.electron.<package name>)
-app.setAppUserModelId('com.electron.my-focus-now');
+// 单实例锁:番茄记录与设置都落在本地文件,双开会让两个进程同时写同一个
+// SQLite(设置文件则互相覆盖),第二条连接写入直接 SQLITE_BUSY —— 番茄记录
+// 会静默丢失。拿不到锁说明已有实例在运行,退出自身;
+// 已有实例在下面的 second-instance 监听里被带到最前
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+}
+
+app.on('second-instance', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+});
+
+// Windows 的系统通知需要 AppUserModelId 才能正确归属到应用:
+// - Squirrel 安装版快捷方式的 AUMI 形如 com.squirrel.<productName>.<exeName>,
+//   必须与之保持一致,否则通知归属/系统通知设置里的分流失效;
+// - 开发模式没有安装器快捷方式,沿用 electron-forge 的默认 appId 即可
+app.setAppUserModelId(
+  app.isPackaged ? 'com.squirrel.FocusNow.FocusNow' : 'com.electron.my-focus-now',
+);
 
 // ---------- IPC 入参校验（渲染进程传来的参数一律不可信） ----------
 
@@ -61,6 +83,11 @@ const isPositiveInt = (v: unknown): v is number =>
 const isISODateString = (v: unknown): v is string =>
   typeof v === 'string' && !Number.isNaN(Date.parse(v));
 
+// 归一化为 UTC ISO 串(toISOString):库里 started_at/ended_at 统一存 "Z" 结尾的
+// UTC 串,字典序才与时间序一致;若放行 "+08:00" 带时区偏移或本地格式的串,
+// SQL 的字符串区间比较会静默错位,统计查询返回错误的范围
+const normalizeISODate = (v: string): string => new Date(v).toISOString();
+
 const isTaskCategory = (v: unknown): v is TaskCategory =>
   typeof v === 'string' && (TASK_CATEGORIES as readonly string[]).includes(v);
 
@@ -72,7 +99,8 @@ function assertTaskName(name: unknown): string {
   assert(typeof name === 'string', '任务名必须是字符串');
   assert(name.trim().length > 0, '任务名不能为空');
   assert(name.length <= 100, '任务名不能超过 100 个字符');
-  return name;
+  // 返回去除首尾空格后的名字,避免 "  x " 与 "x" 存成两个不同任务
+  return name.trim();
 }
 
 function assertTaskUpdates(updates: unknown): TaskUpdates {
@@ -102,7 +130,13 @@ function assertPomodoroInput(input: unknown): PomodoroInput {
   assert(isPomodoroType(type), 'type 必须是 work/short_break/long_break 之一');
   assert(isISODateString(startedAt), 'startedAt 必须是合法的时间字符串');
   assert(isISODateString(endedAt), 'endedAt 必须是合法的时间字符串');
-  return { taskId, duration, type, startedAt, endedAt };
+  return {
+    taskId,
+    duration,
+    type,
+    startedAt: normalizeISODate(startedAt),
+    endedAt: normalizeISODate(endedAt),
+  };
 }
 
 // 通知文案：标题/内容都必须是有内容的字符串，长度在合理范围内（防异常数据）
@@ -170,8 +204,11 @@ ipcMain.handle('db:tasks:completed-count-today', () => getCompletedTaskCountToda
 ipcMain.handle('db:pomodoros:range', (_event, startISO: unknown, endISO: unknown) => {
   assert(isISODateString(startISO), 'startISO 必须是合法的时间字符串');
   assert(isISODateString(endISO), 'endISO 必须是合法的时间字符串');
-  assert(startISO < endISO, 'startISO 必须早于 endISO');
-  return getPomodorosByRange(startISO, endISO);
+  // 先归一化再比较:字典序比较只在同为 UTC "Z" 串时才等于时间序
+  const start = normalizeISODate(startISO);
+  const end = normalizeISODate(endISO);
+  assert(start < end, 'startISO 必须早于 endISO');
+  return getPomodorosByRange(start, end);
 });
 
 // 桌面通知：渲染进程不直接碰 Notification，统一由主进程弹出；
@@ -186,7 +223,8 @@ ipcMain.handle('notification:show', (event, title: unknown, body: unknown) => {
     icon: getAppIconPath(),
   });
   notification.on('click', () => {
-    if (!win) return;
+    // 窗口可能在通知存活期间被销毁,直接访问会抛 Object has been destroyed
+    if (!win || win.isDestroyed()) return;
     if (win.isMinimized()) win.restore();
     win.show();
     win.focus();
@@ -279,10 +317,6 @@ ipcMain.handle('settings:set', async (event, key: unknown, value: unknown) => {
 
 // ---------- 提示音文件：选择(复制副本进专属目录) + 加载(只准读专属目录) ----------
 
-const SOUND_EXTENSIONS = ['mp3', 'wav', 'ogg'];
-// 自定义提示音大小上限：音频文件几 MB 足够，限制读取大小防止异常大文件拖垮内存
-const SOUND_FILE_MAX_BYTES = 20 * 1024 * 1024;
-
 const SOUND_MIME: Record<string, string> = {
   mp3: 'audio/mpeg',
   wav: 'audio/wav',
@@ -296,7 +330,7 @@ ipcMain.handle('sound:pick', async (event, kind: unknown) => {
   assert(isSoundKind(kind), '未知的提示音类别');
   const options: Electron.OpenDialogOptions = {
     title: '选择提示音文件',
-    filters: [{ name: '音频文件', extensions: SOUND_EXTENSIONS }],
+    filters: [{ name: '音频文件', extensions: [...SOUND_EXTENSIONS] }],
     properties: ['openFile'],
   };
   const win = BrowserWindow.fromWebContents(event.sender);
@@ -353,13 +387,17 @@ const createWindow = async () => {
   const { workArea } = screen.getPrimaryDisplay();
   const width = Math.round(workArea.width * 0.6);
   const height = Math.round(workArea.height * 0.95);
+  // 最小尺寸用固定下限而不是初始尺寸:若跟随屏幕比例,换到更小的副屏后
+  // 窗口会比工作区还大且无法缩小(初始尺寸只作为打开时的大小)
+  const MIN_WIDTH = 720;
+  const MIN_HEIGHT = 560;
 
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width,
     height,
-    minWidth: width,
-    minHeight: height,
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
     center: true,
     title: '番茄钟',
     icon: getAppIconPath(),
@@ -367,18 +405,38 @@ const createWindow = async () => {
     titleBarStyle: 'hidden',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      // 显式声明安全基线(preload 只用 contextBridge/ipcRenderer,沙箱下可用),
+      // 不依赖上游默认值——这正是 CLAUDE.md 架构规范的要求
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
       // 关闭后台节流：窗口最小化/被遮挡/托盘收起时，倒计时 tick 与提示音播放
       // 不被系统省电策略推迟（Web Audio 播放本身由音频线程驱动，这里是双保险）
       backgroundThrottling: false,
     },
   });
 
+  // 导航防护:窗口只允许加载应用自身页面。拖一个 HTML 文件进窗口或 window.open
+  // 都不能把 webContents 导走——否则外来页面会挂上同一个 preload,
+  // 拿到 window.database/settings/sound 全部能力
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const selfURL = MAIN_WINDOW_VITE_DEV_SERVER_URL
+      ? MAIN_WINDOW_VITE_DEV_SERVER_URL
+      : pathToFileURL(
+          path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
+        ).href;
+    if (!url.startsWith(selfURL)) event.preventDefault();
+  });
+
   // 点标题栏 × 不退出:隐藏窗口到托盘,应用继续在后台计时;
-  // 真正退出(托盘菜单「退出番茄钟」→ app.quit() → before-quit)时放行
-  mainWindow.on('close', (event) => {
+  // 真正退出(托盘菜单「退出番茄钟」→ app.quit() → before-quit)时放行。
+  // 用局部引用而非模块级 mainWindow,窗口重建后各实例各管各的 close
+  const win = mainWindow;
+  win.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
-      mainWindow?.hide();
+      win.hide();
     }
   });
 
@@ -395,17 +453,55 @@ const createWindow = async () => {
   }
 };
 
+// 窗口创建失败(如设置文件损坏导致读取抛错)时给出可见错误并退出,
+// 避免「应用常驻托盘却永远没有窗口、也没有任何提示」的静默故障
+function safeCreateWindow(): void {
+  createWindow().catch((err) => {
+    dialog.showErrorBox(
+      '番茄钟无法启动',
+      `窗口创建失败。\n\n${err instanceof Error ? err.message : String(err)}`,
+    );
+    app.quit();
+  });
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', () => {
-  // 启动时初始化数据库（建表 + 索引均为 IF NOT EXISTS，已存在则跳过）
-  initDatabase();
   // 彻底移除应用菜单栏：按 Alt 也不会弹出
   Menu.setApplicationMenu(null);
-  void createWindow();
-  // 系统托盘:窗口引用用函数注入,托盘拿到的永远是最新的主窗口
-  createTray(() => mainWindow);
+
+  // 启动时初始化数据库（建表 + 索引均为 IF NOT EXISTS，已存在则跳过；
+  // 文件损坏时 initDatabase 内部会隔离坏文件并重建）
+  try {
+    initDatabase();
+  } catch (err) {
+    dialog.showErrorBox(
+      '番茄钟无法启动',
+      `本地数据库初始化失败。\n\n${err instanceof Error ? err.message : String(err)}`,
+    );
+    app.quit();
+    return;
+  }
+
+  // Squirrel 打包后 exe 路径带版本号,应用更新后登录启动项仍指向被卸载的旧
+  // exe,自启会静默失效;启动时检测到「有启动项但已无法启动」就用当前 exe 重写
+  if (app.isPackaged) {
+    const login = app.getLoginItemSettings();
+    if (login.openAtLogin && !login.executableWillLaunchAtLogin) {
+      app.setLoginItemSettings({ openAtLogin: true });
+    }
+  }
+
+  safeCreateWindow();
+  // 系统托盘:窗口引用用函数注入,托盘拿到的永远是最新的主窗口。
+  // 托盘创建失败(图标文件缺失等)不阻断主窗口——降级为无托盘运行
+  try {
+    createTray(() => mainWindow);
+  } catch (err) {
+    console.error('系统托盘创建失败:', err);
+  }
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -421,9 +517,13 @@ app.on('activate', () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
-    void createWindow();
+    safeCreateWindow();
   }
 });
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.
+// 主进程兜底:任何未捕获异常都给出可见提示再退出,
+// 不留「进程悄悄死掉/弹原始堆栈框」两种体验
+process.on('uncaughtException', (err) => {
+  dialog.showErrorBox('番茄钟遇到错误', err.stack || err.message);
+  app.quit();
+});

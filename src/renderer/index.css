@@ -251,3 +251,14 @@
       0 12px 24px -6px rgb(0 0 0 / 0.08);
   }
 }
+
+/* ============================================================
+   样式规范速记(全应用统一,新页面照此执行)
+   - 间距:页面边缘留白 p-8;页面级卡片间距 gap-4;大容器卡内 p-8,内容卡 p-6,列表项 space-y-3
+   - 标题:页面标题 text-xl font-bold 主题色 > 区域标题 text-base font-bold 主题色(配同色下划线装饰)
+     > 正文 text-sm text-gray-700 > 辅助 text-xs text-gray-400(不引入 gray-500/600 中间档)
+   - 按钮:渐变主按钮统一 shadow-lg 主题色 40% + hover:scale-105 hover:brightness-110 active:scale-95;
+     按高度分档圆角——大 CTA h-11 rounded-2xl、方形图标 h-10 rounded-xl、小按钮 h-8 rounded-lg
+   - 卡片:页面级大容器 rounded-3xl,内容卡 rounded-2xl,一律用 .card-refined / .glow-card 多层阴影
+   - 图标:同款图标同尺寸;区域 emoji 图标 text-base;标题栏窗口控制 10px(Windows 惯例)
+   ============================================================ */

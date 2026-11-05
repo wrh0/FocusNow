@@ -1,5 +1,6 @@
 import { BrowserWindow, screen } from 'electron';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { MiniTimerState } from '../shared/types';
 
 // ---------- 迷你窗口 ----------
@@ -47,9 +48,11 @@ function resolvePosition(): { x: number; y: number } {
   };
 }
 
-function createMiniWindow(): BrowserWindow {
+function createMiniWindow(
+  getMainWindow: () => BrowserWindow | null,
+): BrowserWindow {
   if (miniWindow && !miniWindow.isDestroyed()) return miniWindow;
-  miniWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: MINI_WIDTH,
     height: MINI_HEIGHT,
     show: false,
@@ -62,32 +65,69 @@ function createMiniWindow(): BrowserWindow {
     backgroundColor: '#1a202c',
     webPreferences: {
       preload: path.join(__dirname, 'preload-mini.js'),
+      // 显式声明安全基线,与主窗口保持一致(不依赖上游默认值)
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
       // 主窗口隐藏后窗口可能被系统节流,关掉保证状态同步与拖拽响应不延迟
       backgroundThrottling: false,
     },
   });
+  miniWindow = win;
   // 比一般置顶更高的层级,盖过主窗口的置顶状态
-  miniWindow.setAlwaysOnTop(true, 'screen-saver');
+  win.setAlwaysOnTop(true, 'screen-saver');
 
-  // 加载迷你窗口页面(开发模式走独立 dev server,打包后走构建产物)
+  // 与主窗口一致的导航防护:迷你窗只允许加载自身页面,
+  // 不给外来内容挂上 preload 桥的机会
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (event, url) => {
+    const selfURL = MINI_WINDOW_VITE_DEV_SERVER_URL
+      ? MINI_WINDOW_VITE_DEV_SERVER_URL
+      : pathToFileURL(
+          path.join(__dirname, `../renderer/${MINI_WINDOW_VITE_NAME}/index.html`),
+        ).href;
+    if (!url.startsWith(selfURL)) event.preventDefault();
+  });
+
+  // 加载失败(如产物缺失/磁盘异常)时 ready-to-show 永远不来,而主窗口此时已被
+  // 隐藏——必须兜底把主窗口带回来,用户不能只剩一个托盘图标
+  win.webContents.on('did-fail-load', () => {
+    if (miniWindow === win) miniWindow = null;
+    if (!win.isDestroyed()) win.destroy();
+    const main = getMainWindow();
+    if (main && !main.isDestroyed()) {
+      if (main.isMinimized()) main.restore();
+      main.show();
+      main.focus();
+    }
+  });
+
+  // 加载迷你窗口页面(开发模式走独立 dev server,打包后走构建产物);
+  // 失败分支由上面的 did-fail-load 统一处理,这里吞掉 rejection 即可
   if (MINI_WINDOW_VITE_DEV_SERVER_URL) {
-    void miniWindow.loadURL(MINI_WINDOW_VITE_DEV_SERVER_URL);
+    win.loadURL(MINI_WINDOW_VITE_DEV_SERVER_URL).catch(() => undefined);
   } else {
-    void miniWindow.loadFile(
-      path.join(__dirname, `../renderer/${MINI_WINDOW_VITE_NAME}/index.html`),
-    );
+    win
+      .loadFile(
+        path.join(__dirname, `../renderer/${MINI_WINDOW_VITE_NAME}/index.html`),
+      )
+      .catch(() => undefined);
   }
-  return miniWindow;
+  return win;
 }
 
 // 进入迷你模式:显示(或创建)迷你窗口,主窗口隐藏——计时在后台继续
 export function enterMiniMode(getMainWindow: () => BrowserWindow | null): void {
-  const win = createMiniWindow();
+  const win = createMiniWindow(getMainWindow);
   win.setPosition(resolvePosition().x, resolvePosition().y);
   // 若渲染端还没加载完,show 交给 ready-to-show;加载完的实例直接显示。
-  // 首帧状态由渲染端挂载时主动 getTimerState 拉取(绕开加载时序竞态)
+  // 首帧状态由渲染端挂载时主动 getTimerState 拉取(绕开加载时序竞态)。
+  // 加载期间重复进入会走到同一分支,先清掉旧监听避免叠加
   if (win.webContents.isLoading()) {
-    win.once('ready-to-show', () => win.show());
+    win.removeAllListeners('ready-to-show');
+    win.once('ready-to-show', () => {
+      if (!win.isDestroyed()) win.show();
+    });
   } else {
     win.show();
   }

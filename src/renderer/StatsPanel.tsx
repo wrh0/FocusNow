@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 // 专注时长格式化:
@@ -12,11 +12,22 @@ function formatFocusDuration(seconds: number): string {
 }
 
 // 数字从 0 滚动到目标值的动画(0.5 秒内完成,ease-out 减速收尾)。
+// 只在首次拿到真实数据时滚动一次:之后每次数据变化都从 0 重滚会显得
+// 整块统计在"闪",时长格式也会在滚动过程中来回跳(45 分钟 → 1.5 小时)。
 // raf 在后台窗口不触发,故额外用 setTimeout 兜底,保证最终一定显示目标值
 function useCountUp(target: number, durationMs = 500): number {
-  const [displayed, setDisplayed] = useState(0);
+  const [displayed, setDisplayed] = useState(target);
+  const animatedRef = useRef(false);
 
   useEffect(() => {
+    // 已滚动过一次:后续目标变化直接跳到新值
+    if (animatedRef.current) {
+      setDisplayed(target);
+      return;
+    }
+    // 首次加载前的占位(0)或真的没有数据:保持 0,等真实数据到来再滚动
+    if (target === 0) return;
+    animatedRef.current = true;
     let rafId = 0;
     const start = performance.now();
     const tick = (now: number) => {

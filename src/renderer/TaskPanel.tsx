@@ -102,10 +102,12 @@ export default function TaskPanel({
   };
 
   return (
-    <div className="flex h-full w-full min-w-0 flex-col rounded-3xl border-l border-white/20 bg-white p-8 shadow-md shadow-gray-300/50">
-      {/* 标题 + 主题色下划线装饰 */}
+    // 浮动卡片:与计时器面板同风格的精致卡面(多层柔和阴影),随内容自然延伸,
+    // 长列表滚动交给 App 中的右栏滚动容器
+    <div className="card-refined flex min-h-full w-full min-w-0 flex-col rounded-3xl p-6">
+      {/* 标题 + 主题色下划线装饰(标题色与设置页卡片标题统一为主题色) */}
       <div className="mb-4">
-        <h2 className="text-base font-bold text-gray-700">任务列表</h2>
+        <h2 className="text-base font-bold text-app-primary">任务列表</h2>
         <span className="mt-1.5 block h-1 w-10 rounded-full bg-app-primary" />
       </div>
 
@@ -153,7 +155,7 @@ export default function TaskPanel({
           <span className="text-sm">还没有任务，添加一个开始专注吧</span>
         </div>
       ) : (
-        <ul className="mt-6 min-h-0 flex-1 space-y-3 overflow-y-auto">
+        <ul className="mt-6 flex-1 space-y-3">
           {tasks.map((task) => (
             <TaskItem
               key={task.id}

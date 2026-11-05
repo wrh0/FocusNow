@@ -58,7 +58,7 @@ export default function TitleBar() {
           onClick={() => void window.windowControls.enterMiniMode()}
           className="[-webkit-app-region:no-drag] flex h-6 w-7 items-center justify-center rounded text-[#1f1f1f] transition-colors hover:bg-[#e6e6e6] active:bg-[#dcdcdc]"
         >
-          <svg width="11" height="11" viewBox="0 0 13 13" aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 13 13" aria-hidden="true">
             {/* 四角括号缩放图标 */}
             <path
               d="M5.5 1H1v4.5M7.5 1H12v4.5M12 7.5V12H7.5M5.5 12H1V7.5"

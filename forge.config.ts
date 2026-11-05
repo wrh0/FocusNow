@@ -10,13 +10,20 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // 应用 exe/任务栏/窗口的图标:不带扩展名,packager 自动选择 .ico(Windows)
+    // 或 .icns(macOS);缺省时发布出去的 exe 会是默认 Electron 图标
+    icon: './resources/icon',
     // 应用图标复制到安装目录的 resources/(asar 外),供主进程运行时读取
     // (托盘、窗口、通知的图标);asar 内只有构建产物,不含原始 resources/
     extraResource: ['./resources/icon.png', './resources/icon.ico'],
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel({}),
+    new MakerSquirrel({
+      // Windows 安装包(Setup.exe)与安装向导的图标;
+      // productName 为 FocusNow,安装包名为 FocusNow-<version> Setup.exe
+      setupIcon: './resources/icon.ico',
+    }),
     new MakerZIP({}, ['darwin']),
     new MakerRpm({}),
     new MakerDeb({}),

@@ -8,8 +8,7 @@
 
 | 依赖 | 版本 | 说明 |
 |------|------|------|
-|------|------|------|
-| electron | 41 | 桌面应用框架 |
+| electron | 45 | 桌面应用框架 |
 | @electron-forge/cli | 7 | 官方脚手架（创建、开发、打包、分发） |
 | react / react-dom | 19 | UI 库 |
 | typescript | 5 | Forge 模板内置 |
@@ -18,8 +17,8 @@
 | tailwindcss | 4 | 使用 `@tailwindcss/vite` 插件，CSS-first 配置，不需要 PostCSS |
 | shadcn/ui | latest | 组件库，按需安装 |
 | node:sqlite | 内置 | Node.js 24 内置 SQLite 模块，无需安装，打包零配置 |
-| chart.js | 4 | 图表库 |
-| react-chartjs-2 | 5 | Chart.js 的 React 封装 |
+| chart.js | 4 | 图表库（统计页后续使用） |
+| react-chartjs-2 | 5 | Chart.js 的 React 封装（统计页后续使用） |
 
 ## 关键技术决策
 - **数据库用 `node:sqlite`，不用 `Supabase` 也不用 `better-sqlite3**。这是桌面应用，数据存本地。`node:sqlite` 是 Node.js 24 内置模块，无需安装任何 npm 包，打包时不需要任何特殊配置，彻底避免了原生模块的编译和打包问题。
@@ -37,8 +36,6 @@ export default defineConfig({
 ```
 
 ```typescript
-
-
 
 `electron-squirrel-startup` 处理 `--squirrel-install` 时需要异步创建快捷方式，  
 不能对它也用 `process.exit(0)`，否则安装会失败。
@@ -67,40 +64,55 @@ export async function getStore() {
       soundEnabled: { type: 'boolean', default: true },
       soundVolume: { type: 'number', default: 0.7 },
       workEndSoundPath: { type: 'string', default: '' },
+      workEndSoundName: { type: 'string', default: '' },
       breakEndSoundPath: { type: 'string', default: '' },
+      breakEndSoundName: { type: 'string', default: '' },
       alwaysOnTop: { type: 'boolean', default: false },
       autoLaunch: { type: 'boolean', default: false },
       dailyGoal: { type: 'number', default: 8 },
       celebrationDate: { type: 'string', default: '' },
+    },
+  });
+  return storeInstance;
 }
 
 // 错误：不能用 require
 // const Store = require('electron-store');
-
+```
 
 所有使用 electron-store 的地方，调用 `getStore()` 获取实例，不要重复动态导入。
-```
 
 
 ## 项目结构
 
 src/
-  main.ts                  – 主进程入口
-  preload.ts               – 安全桥梁（contextBridge）
-  renderer/
-    icon.png               – 应用图标（从 resources 复制，供 Vite import）
-    work-end.mp3           – 工作结束提示音（从 resources 复制，供 Vite import）
-    break-end.mp3          – 休息结束提示音（从 resources 复制，供 Vite import）
-    assets.d.ts            – 静态资源类型声明（.png、.mp3）
-    Celebration.tsx        – 达标庆祝动画组件（撒花纸片）
-    AchievementsPanel.tsx  – 成就墙页面
-    AchievementToast.tsx   – 成就解锁提示组件
+  main.ts                  – 主进程入口（窗口、IPC、通知、单实例锁）
+  preload.ts               – 主窗口安全桥梁（contextBridge）
+  preload-mini.ts          – 迷你窗口独立安全桥梁（能力最小化，与主窗口互不相干）
+  shared/types.ts          – 主/渲染进程共享的类型（AppSettings、Task、Pomodoro 等）
   main/
-    database.ts            – SQLite 数据库管理
-    settings.ts            – electron-store 设置管理
+    database.ts            – SQLite 数据库管理（node:sqlite，含损坏自愈）
+    settings.ts            – electron-store 设置管理（schema 校验 + 取值范围校验）
     tray.ts                – 系统托盘（图标、悬停状态、右键菜单、命令转发）
+    mini.ts                – 迷你悬浮窗（独立 BrowserWindow，只显示主窗口转发的计时状态）
+    paths.ts               – 路径解析（图标按是否打包分支）
+    sound-files.ts         – 自定义提示音（复制副本进专属目录、realpath 目录闸门）
+  renderer/
+    index.tsx / App.tsx    – 主窗口入口与布局（首页常驻挂载，切页用 hidden）
+    TimerPanel.tsx         – 计时器（挂钟基准倒计时、番茄写库、托盘/迷你窗口上报）
+    TaskPanel.tsx          – 任务列表（分类、今日番茄数、完成沉底）
+    StatsPanel.tsx         – 今日统计卡片（番茄数/专注时长/完成任务数）
+    SettingsPanel.tsx      – 设置页（时长、提示音、音量、自启、置顶）
+    SideNav.tsx            – 侧边导航
+    TitleBar.tsx           – 自绘标题栏（最小化/最大化/迷你模式/关闭/图钉）
+    use-settings.ts        – 设置镜像 hook（useSyncExternalStore + 广播同步）
+    tray-icon.ts           – 托盘倒计时数字图标绘制（canvas → dataURL）
+    icon.png / work-end.mp3 / break-end.mp3 – 静态资源（vite import，见下）
+    assets.d.ts            – 静态资源类型声明（.png、.mp3）
+  renderer-mini/
+    index.tsx / MiniApp.tsx – 迷你窗口界面（纯显示端，计时逻辑在主窗口）
 resources/
-  icon.png                 – 应用图标（主进程使用）
+  icon.png                 – 应用图标（主进程使用，extraResource 复制）
   icon.ico                 – 应用图标（打包用）
   sounds/                  – 提示音文件（原始文件）
 
@@ -135,7 +147,7 @@ declare module '*.mp3' {
 }
 
 ## 打包配置
-`forge.config.ts` 中的关[?]配置
+`forge.config.ts` 中的关键配置
 - `packagerConfig.icon`: 应用图标路径（不带扩展名，Electron 自动选择 `.ico` 或 `.icns`）
 - `packagerConfig.extraResource`: 打包时需要复制到安装目录的额外文件（如 `icon.png`、`icon.ico`，供主进程运行时使用）
 - `MakerSquirrel.setupIcon`: Windows 安装包图标
@@ -155,7 +167,8 @@ declare module '*.mp3' {
 
 ## 数据库设计
 
-使用 node:sqlite 同步 API，数据库文件存放在 `app.getPath('userData') + '/focusnow.db'`。
+使用 node:sqlite 同步 API，数据库文件存放在 `app.getPath('userData') + '/myfocusnow.db'`。
+文件损坏时自动隔离为 `myfocusnow.db.corrupt-<时间戳>` 并重建（见 `database.ts` 的 getDb）。
 
 主要数据表（分阶段创建，每张表在首次用到时通过 `CREATE TABLE IF NOT EXISTS` 创建）：
 - `tasks` - 任务 (name, category, completed, completed_at, created_at) — 第 08 节创建

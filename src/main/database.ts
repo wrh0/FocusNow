@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
+import { renameSync } from 'node:fs';
 import { app } from 'electron';
 import type {
   Pomodoro,
@@ -14,6 +15,21 @@ import type {
 // 避免 Vite 静态分析报错（同时在 vite.main.config.ts 中声明为 external）
 let db: DatabaseSync | null = null;
 
+// 打开连接 + 启用约束 + 建表。损坏的库文件通常在首次 PRAGMA/建表时才抛错,
+// 因此这几步必须在同一个 try 块里完成,损坏才能被外层完整捕获
+function openDatabase(
+  Ctor: new (path: string) => DatabaseSync,
+  dbPath: string,
+): DatabaseSync {
+  const database = new Ctor(dbPath);
+  // 启用外键约束，让删除任务时 pomodoros.task_id 自动置 NULL
+  database.exec('PRAGMA foreign_keys = ON;');
+  // 写入忙等:偶发的 SQLITE_BUSY(外部工具短暂占用库文件)时等待而不是直接抛错
+  database.exec('PRAGMA busy_timeout = 3000;');
+  createTables(database);
+  return database;
+}
+
 function getDb(): DatabaseSync {
   if (db) return db;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -21,10 +37,22 @@ function getDb(): DatabaseSync {
     DatabaseSync: new (path: string) => DatabaseSync;
   };
   // 数据库文件放在应用的专属数据目录，由 Electron 决定路径
-  db = new DatabaseSyncCtor(path.join(app.getPath('userData'), 'myfocusnow.db'));
-  // 启用外键约束，让删除任务时 pomodoros.task_id 自动置 NULL
-  db.exec('PRAGMA foreign_keys = ON;');
-  createTables(db);
+  const dbPath = path.join(app.getPath('userData'), 'myfocusnow.db');
+  try {
+    db = openDatabase(DatabaseSyncCtor, dbPath);
+  } catch (err) {
+    // 数据库文件损坏(SQLITE_CORRUPT / NOTADB 等):把坏文件改名隔离后重建,
+    // 应用自愈启动、坏数据保留在旁边供找回;不处理的话每次启动都崩且永不自愈
+    const backupPath = `${dbPath}.corrupt-${Date.now()}`;
+    try {
+      renameSync(dbPath, backupPath);
+    } catch {
+      // 改名失败(文件被占用等)则放弃自愈,把原始错误交出去
+      throw err;
+    }
+    db = openDatabase(DatabaseSyncCtor, dbPath);
+    console.error(`数据库文件已损坏，已隔离为 ${backupPath} 并重建。原始错误:`, err);
+  }
   return db;
 }
 
@@ -180,12 +208,19 @@ export function deleteTask(id: number): void {
 // ---------- 番茄钟记录 ----------
 
 export function addPomodoro(input: PomodoroInput): Pomodoro {
+  // 专注中任务可能已被删除(计时结束时才落库,中途删任务不受拦截)。
+  // 外键约束下带着失效的 taskId 插入会直接报错——完整的番茄就静默丢了。
+  // 写入前确认任务仍存在,不存在则不关联(置 NULL),番茄记录本身必须保留
+  let taskId = input.taskId;
+  if (taskId !== null && getTaskById(taskId) === null) {
+    taskId = null;
+  }
   const result = getDb()
     .prepare(
       'INSERT INTO pomodoros (task_id, duration, type, started_at, ended_at) VALUES (?, ?, ?, ?, ?)',
     )
-    .run(input.taskId, input.duration, input.type, input.startedAt, input.endedAt);
-  return { id: Number(result.lastInsertRowid), ...input };
+    .run(taskId, input.duration, input.type, input.startedAt, input.endedAt);
+  return { id: Number(result.lastInsertRowid), ...input, taskId };
 }
 
 // 本地时区中 date 所在一天的 [start, end) ISO 时间范围（左闭右开）

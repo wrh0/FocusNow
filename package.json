@@ -1,20 +1,26 @@
 {
-  "name": "my-focus-now",
-  "productName": "my-focus-now",
+  "name": "focusnow",
+  "productName": "FocusNow",
   "version": "1.0.0",
-  "description": "My Electron application description",
+  "description": "FocusNow 番茄钟 —— 基于 Electron + React 的桌面专注计时应用，支持任务管理、数据统计与系统托盘",
   "main": ".vite/build/main.js",
   "private": true,
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
-    "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx ."
   },
-  "keywords": [],
+  "keywords": [
+    "pomodoro",
+    "timer",
+    "focus",
+    "electron",
+    "react",
+    "productivity"
+  ],
   "author": {
-    "name": "wrh",
+    "name": "wrh"
   },
   "license": "MIT",
   "devDependencies": {

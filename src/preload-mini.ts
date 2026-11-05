@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('mini', {
   // 订阅持续同步(主窗口每秒上报,主进程实时转发);返回取消监听函数
   onTimerState: (callback: (state: MiniTimerState) => void) => {
     const listener = (_event: IpcRendererEvent, state: unknown) => {
-      // 状态由主进程 assertMiniTimerState 校验后转发,形状可信
+      // 状态由主进程 parseMiniTimerState 校验后转发,形状可信
       callback(state as MiniTimerState);
     };
     ipcRenderer.on('mini:timer-state', listener);

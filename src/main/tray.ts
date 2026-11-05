@@ -33,6 +33,11 @@ function bringToFront(win: BrowserWindow | null): void {
 // 计时控制命令通过 tray:command 通道发给渲染进程执行,计时逻辑留在界面一侧
 export function createTray(getWindow: () => BrowserWindow | null): void {
   const icon = nativeImage.createFromPath(getAppIconPath());
+  if (icon.isEmpty()) {
+    // 图标加载失败(打包资源缺失等)时记下来便于排查;
+    // 仍继续创建托盘,降级为系统默认占位图标
+    console.error(`托盘图标加载失败: ${getAppIconPath()}`);
+  }
   defaultIcon = icon;
   tray = new Tray(icon);
   tray.setToolTip('番茄钟 - 空闲');
@@ -97,6 +102,9 @@ export function createTray(getWindow: () => BrowserWindow | null): void {
     ) {
       return;
     }
-    tray?.setImage(nativeImage.createFromDataURL(dataURL));
+    // 格式合法但内容损坏的 dataURL 解出来是空图,不能让托盘变成空白
+    const image = nativeImage.createFromDataURL(dataURL);
+    if (image.isEmpty()) return;
+    tray?.setImage(image);
   });
 }

@@ -25,6 +25,13 @@ export function isSoundKind(kind: unknown): kind is SoundKind {
   return typeof kind === 'string' && Object.hasOwn(SOUND_KIND_PREFIX, kind);
 }
 
+// 支持的音频扩展名:pick 对话框的过滤器、导入落盘校验、load 读取校验共用一份
+export const SOUND_EXTENSIONS: readonly string[] = ['mp3', 'wav', 'ogg'];
+
+// 与读取端(sound:load)一致的 20MB 上限:导入时就拦住,
+// 避免异常大的文件先被复制进应用目录占满磁盘
+export const SOUND_FILE_MAX_BYTES = 20 * 1024 * 1024;
+
 async function ensureSoundsDir(): Promise<string> {
   const dir = getSoundsDir();
   await fsp.mkdir(dir, { recursive: true });
@@ -53,6 +60,18 @@ export async function importSoundFile(
   sourcePath: string,
 ): Promise<{ path: string; name: string }> {
   const ext = path.extname(sourcePath).slice(1).toLowerCase();
+  // 对话框的 filters 只是建议性过滤,Windows 上仍可直接键入任意文件路径——
+  // 落盘前按扩展名与大小再校验一次,拒绝任意类型/任意大小的文件混进专属目录
+  if (!SOUND_EXTENSIONS.includes(ext)) {
+    throw new Error(`只支持 ${SOUND_EXTENSIONS.join('/')} 格式的音频文件`);
+  }
+  const stat = await fsp.stat(sourcePath).catch(() => null);
+  if (stat === null || !stat.isFile()) {
+    throw new Error('音频文件不存在');
+  }
+  if (stat.size === 0 || stat.size > SOUND_FILE_MAX_BYTES) {
+    throw new Error('音频文件为空或超过 20MB');
+  }
   const dir = await ensureSoundsDir();
   const destPath = path.join(
     dir,

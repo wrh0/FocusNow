@@ -10,8 +10,8 @@ import TitleBar from './TitleBar';
 
 // 缩放下限,防止窗口极小时内容小到无法辨认
 const MIN_SCALE = 0.5;
-// 计时器整体(计时器 + 统计)与左栏边缘的间距
-const PANE_PADDING = 40;
+// 计时器整体(计时器 + 统计)与左栏边缘的间距,与右栏/设置页的 p-8 统一
+const PANE_PADDING = 32;
 
 export default function App() {
   // 任务列表(带今日番茄数)与选中任务:提升到顶层,供计时器与任务面板共享
@@ -24,6 +24,8 @@ export default function App() {
   const [taskCompletedSignal, setTaskCompletedSignal] = useState(0);
   // 当前页面
   const [activePage, setActivePage] = useState<PageId>('home');
+  // 数据加载失败标记:数据库读不出来时给用户可见提示,而不是伪装成「还没有任务」
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,8 +44,10 @@ export default function App() {
           }
         }
         setTasks(taskList.map((t) => ({ ...t, pomodoroCount: counts.get(t.id) ?? 0 })));
+        setLoadError(false);
       } catch (err) {
         console.error('读取任务数据失败:', err);
+        if (!cancelled) setLoadError(true);
       }
     })();
     return () => {
@@ -106,7 +110,7 @@ export default function App() {
               <div className="flex min-h-full items-center justify-center">
                 <div
                   ref={leftContentRef}
-                  className="flex w-[380px] shrink-0 flex-col gap-3"
+                  className="flex w-[380px] shrink-0 flex-col gap-4"
                   style={{ transform: `scale(${scale})` }}
                 >
                   <TimerPanel
@@ -119,8 +123,14 @@ export default function App() {
                 </div>
               </div>
             </div>
-            {/* 右栏:任务列表,宽度随窗口弹性变化、贴住右边缘,独立滚动 */}
-            <div className="h-full w-1/2 overflow-y-auto">
+            {/* 右栏:任务列表,宽度随窗口弹性变化;边缘留白与左栏/设置页统一 p-8,
+                任务面板作为浮动卡片随内容自然延伸,滚动交给本层(隐藏系统滚动条) */}
+            <div className="scrollbar-hidden h-full w-1/2 overflow-y-auto p-8">
+              {loadError && (
+                <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                  数据加载失败，请重试或重启应用
+                </div>
+              )}
               <TaskPanel
                 tasks={tasks}
                 selectedTaskId={selectedTaskId}

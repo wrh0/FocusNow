@@ -141,13 +141,15 @@ function DurationSetting({
 
   // 提交:clamp 到合法范围并取整;与当前值相同则只还原显示。
   // 输入框可能拿到非数字(清空后失焦/乱输入),此时不提交,还原为当前值
-  const commit = (raw: number) => {
+  // —— Number('') 是 0 而非 NaN,必须先判空串,否则清空会被写成本档最小值
+  const commit = (raw: string) => {
     setPreviewValue(null);
-    if (!Number.isFinite(raw)) {
+    const parsed = Number(raw);
+    if (raw.trim() === '' || !Number.isFinite(parsed)) {
       setText(String(value));
       return;
     }
-    const clamped = Math.min(max, Math.max(min, Math.round(raw)));
+    const clamped = Math.min(max, Math.max(min, Math.round(parsed)));
     setText(String(clamped));
     if (clamped !== value) onCommit(clamped);
   };
@@ -174,7 +176,7 @@ function DurationSetting({
             max={max}
             value={text}
             onChange={(e) => handleTextInput(e.target.value)}
-            onBlur={() => commit(Number(text))}
+            onBlur={() => commit(text)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') e.currentTarget.blur();
             }}
@@ -194,7 +196,7 @@ function DurationSetting({
           setPreviewValue(v);
           setText(String(v));
         }}
-        onValueCommit={([v]) => commit(v)}
+        onValueCommit={([v]) => commit(String(v))}
       />
       <p className="mt-1.5 text-xs text-gray-400" aria-hidden="true">
         {min} ~ {max} 分钟
@@ -281,6 +283,9 @@ function SoundFileSetting({
         updateSetting(kind, picked.path);
         updateSetting(nameKey, picked.name);
       }
+    } catch (err) {
+      // 对话框/复制失败不能留成未处理的 Promise rejection
+      console.error('选择提示音文件失败:', err);
     } finally {
       setPicking(false);
     }
@@ -302,9 +307,9 @@ function SoundFileSetting({
       <Label>{label}</Label>
       <div className="mt-2 flex items-center gap-2">
         {/* 当前音频展示区:默认音显示固定文案,自定义音显示用户选择的原始文件名 */}
-        <div className="flex h-9 min-w-0 flex-1 items-center rounded-md border border-gray-300 bg-gray-50/60 px-3">
+        <div className="flex h-9 min-w-0 flex-1 items-center rounded-lg border border-gray-300 bg-gray-50/60 px-3">
           <span
-            className={cn('truncate text-sm', path ? 'text-gray-600' : 'text-gray-400')}
+            className={cn('truncate text-sm', path ? 'text-gray-700' : 'text-gray-400')}
             title={path || undefined}
           >
             {path ? name : '默认提示音'}
@@ -330,7 +335,7 @@ function SoundFileSetting({
           variant="ghost"
           size="sm"
           disabled={busy}
-          className="bg-linear-to-b from-app-primary to-app-primary-dark text-white shadow-md shadow-app-primary/40 transition-all duration-200 hover:scale-105 hover:brightness-110 hover:text-white active:scale-95"
+          className="bg-linear-to-b from-app-primary to-app-primary-dark text-white shadow-lg shadow-app-primary/40 transition-all duration-200 hover:scale-105 hover:brightness-110 hover:text-white active:scale-95"
           onClick={() => void handlePick()}
         >
           选择
@@ -376,7 +381,7 @@ function VolumeSetting({
         <Label>提示音音量</Label>
         <span
           className={cn(
-            'w-12 text-right text-sm tabular-nums text-gray-600',
+            'w-12 text-right text-sm tabular-nums text-gray-700',
             disabled && 'text-gray-300',
           )}
         >
@@ -479,10 +484,13 @@ export default function SettingsPanel() {
           src: [src],
           volume,
           onend: () => {
-            // 自然播完恢复 ▶️;只有当前令牌的结束回调才清状态
+            // 自然播完恢复 ▶️;只有当前令牌的结束回调才清状态。
+            // 顺手释放实例:Howler 把每个 Howl 常驻内部列表,
+            // 不 unload 的话解码缓冲会留到下一次试听/离开页面
             if (token === tokenRef.current) {
               previewRef.current = null;
               setPlayingKind(null);
+              howl.unload();
             }
           },
         });
@@ -521,10 +529,10 @@ export default function SettingsPanel() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-10">
-        {/* 页面标题:主题色加粗 + 主题色下划线装饰(与任务面板标题同风格) */}
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-8">
+        {/* 页面标题:主题色加粗 + 主题色下划线装饰(与任务面板标题同风格,比区域标题大一号) */}
         <header className="animate-fade-in-up">
-          <h1 className="text-lg font-bold text-app-primary">设置</h1>
+          <h1 className="text-xl font-bold text-app-primary">设置</h1>
           <span className="mt-1.5 block h-1 w-10 rounded-full bg-app-primary" />
         </header>
 

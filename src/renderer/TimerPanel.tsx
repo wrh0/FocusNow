@@ -139,6 +139,8 @@ export default function TimerPanel({
   const longBreakDuration = (settings?.longBreakDuration ?? 15) * 60;
   const longBreakInterval = settings?.longBreakInterval ?? 4;
   const soundVolume = settings?.soundVolume ?? 0.7;
+  // 提示音开关:关闭后阶段结束时不再播放提示音(系统通知不受影响,照常弹出)
+  const soundEnabled = settings?.soundEnabled ?? true;
 
   const [status, setStatus] = useState<TimerStatus>('idle');
   const [secondsLeft, setSecondsLeft] = useState(workDuration);
@@ -153,6 +155,9 @@ export default function TimerPanel({
   // 开始专注时的时长快照(秒):写库记录"开始那一刻"设置的时长,
   // 专注中途改设置不影响本番茄的记录时长
   const focusDurationRef = useRef(workDuration);
+  // 开始休息时的时长快照(秒):休息进行中/暂停中圆环按快照计算,
+  // 中途改设置不跳变;等待休息(work-done)界面仍跟随当前设置展示
+  const breakDurationRef = useRef(shortBreakDuration);
   // 本轮周期（4 个一组）起点的累计番茄数：集满 4 个后底部不清零，
   // 满屏的番茄保持到开始新一轮专注的那一刻才清零（cycleOffset 在那时更新）
   const [cycleOffset, setCycleOffset] = useState(0);
@@ -304,8 +309,8 @@ export default function TimerPanel({
       nextBreak === 'long' ? longBreakDuration : shortBreakDuration,
     );
     setStatus('work-done');
-    // 归零立即播放提示音并弹系统通知,不等用户点击
-    soundsRef.current?.workEnd.play();
+    // 归零立即播放提示音并弹系统通知,不等用户点击(开关关闭时只弹通知)
+    if (soundEnabled) soundsRef.current?.workEnd.play();
     window.notification
       .show('专注结束 🍅', '专注时间到了，休息一下吧！')
       .catch((err) => console.error('发送专注结束通知失败:', err));
@@ -344,8 +349,8 @@ export default function TimerPanel({
       endAtRef.current = null;
       setSecondsLeft(workDuration);
       setStatus('break-done');
-      // 归零立即播放提示音并弹系统通知,不等用户点击
-      soundsRef.current?.breakEnd.play();
+      // 归零立即播放提示音并弹系统通知,不等用户点击(开关关闭时只弹通知)
+      if (soundEnabled) soundsRef.current?.breakEnd.play();
       window.notification
         .show('休息结束 ⏰', '休息结束，继续加油！')
         .catch((err) => console.error('发送休息结束通知失败:', err));
@@ -362,14 +367,16 @@ export default function TimerPanel({
     setSecondsLeft(workDuration);
   }, [taskCompletedSignal, workDuration]);
 
-  // 进度环比例：work-done 展示的是即将开始的休息时长，其余按各自阶段总时长计算
+  // 进度环比例：计时/暂停中的阶段用各自开始那一刻的时长快照——与 endAtRef
+  // 的口径一致,中途改设置圆环比例不跳变;空闲/等待休息(work-done)跟随当前设置展示
   const totalDuration =
-    status === 'idle' ||
-    status === 'working' ||
-    status === 'paused' ||
-    status === 'break-done'
-      ? workDuration
-      : breakDuration;
+    status === 'working' || status === 'paused'
+      ? focusDurationRef.current
+      : status === 'short-break' || status === 'long-break' || status === 'break-paused'
+        ? breakDurationRef.current
+        : status === 'work-done'
+          ? breakDuration
+          : workDuration;
   const progress = secondsLeft / totalDuration;
 
   const statusCfg = STATUS_CONFIG[status];
@@ -422,6 +429,7 @@ export default function TimerPanel({
       setStatus('working');
     } else if (status === 'work-done' || status === 'break-paused') {
       // 开始（或继续）休息，休息类型在专注完成时已确定
+      if (status === 'work-done') breakDurationRef.current = breakDuration;
       endAtRef.current =
         Date.now() + (status === 'break-paused' ? secondsLeft : breakDuration) * 1000;
       setStatus(nextBreakType === 'long' ? 'long-break' : 'short-break');
@@ -545,14 +553,14 @@ export default function TimerPanel({
           <>
             <span className="shrink-0 text-xs text-gray-400">当前任务：</span>
             <span
-              className="min-w-0 truncate text-sm font-bold text-gray-600"
+              className="min-w-0 truncate text-sm font-bold text-gray-700"
               title={selectedTask.name}
             >
               {selectedTask.name}
             </span>
           </>
         ) : (
-          <span className="text-sm font-bold text-gray-600">自由专注</span>
+          <span className="text-sm font-bold text-gray-700">自由专注</span>
         )}
       </p>
 

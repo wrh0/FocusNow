@@ -22,7 +22,17 @@ function accept(next: AppSettings): void {
   if (snapshot && isShallowEqual(snapshot, next)) return;
   snapshot = next;
   emit();
+  // 首次加载完成:把快照就绪前排队的写入按序补交
+  if (pendingWrites.length > 0) {
+    const writes = pendingWrites.splice(0);
+    for (const write of writes) write();
+  }
 }
+
+// 快照就绪前的待写入队列(存闭包绕开泛型键值对的类型配对):
+// 应用启动后的极早期(如几十毫秒内)点击开关时,设置可能还没加载完成,
+// 排队等加载完成后补写,不静默丢弃用户的操作
+const pendingWrites: (() => void)[] = [];
 
 // 模块加载即拉取初始设置并订阅变更广播(本模块只被 import 一次,整块只执行一次;
 // preload 先于渲染进程 bundle 运行,window.settings 此处必然已存在)
@@ -54,7 +64,11 @@ export function updateSetting<K extends keyof AppSettings>(
   key: K,
   value: AppSettings[K],
 ): void {
-  if (!snapshot) return;
+  if (!snapshot) {
+    // 设置尚未加载完成:排队,快照就绪后按序补交
+    pendingWrites.push(() => updateSetting(key, value));
+    return;
+  }
   const previous = snapshot;
   accept({ ...snapshot, [key]: value });
   window.settings.set(key, value).catch((err) => {
