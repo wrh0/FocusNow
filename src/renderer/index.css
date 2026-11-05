@@ -1,0 +1,253 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* 隐藏滚动条但保留滚动能力(左栏使用) */
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================================
+   视觉升级准备区:主题色板、动画、卡片样式
+   (追加层,不影响上方已有样式;以后换配色只需改这里的值)
+   static:所有变量无条件输出到 :root,供后续组件与 JS 直接引用
+   ============================================================ */
+@theme static {
+  /* 主题色(番茄红)与浅色版 —— 统一 app- 前缀,与上方 shadcn 变量区分 */
+  --color-app-primary: #e53e3e;
+  --color-app-primary-light: #feb2b2;
+  --color-app-primary-dark: #c53030;
+
+  /* 休息绿系:主色用于计时中圆环/状态,浅色用于等待休息的圆环,深色用于按钮渐变 */
+  --color-app-break: #48bb78;
+  --color-app-break-light: #9ae6b4;
+  --color-app-break-dark: #2f855a;
+
+  /* 暂停琥珀:计时暂停时圆环与状态文字,深色用于按钮渐变(够深,白字可读) */
+  --color-app-amber: #d69e2e;
+  --color-app-amber-dark: #975a16;
+
+  /* 统计装饰蓝(专注时长卡片) */
+  --color-app-blue: #3182ce;
+
+  /* 重置按钮深灰渐变 */
+  --color-app-reset: #4a5568;
+  --color-app-reset-dark: #2d3748;
+
+  /* 侧边栏深色渐变(上 → 下) */
+  --color-app-nav-from: #1a202c;
+  --color-app-nav-to: #2d3748;
+
+  /* 页面背景浅色渐变(上 → 下) */
+  --color-app-bg-from: #f7fafc;
+  --color-app-bg-to: #edf2f7;
+
+  /* 卡片:纯白背景 + 浅灰边框 */
+  --color-app-card: #ffffff;
+  --color-app-card-border: #e2e8f0;
+
+  /* 发光色:专注红 / 休息绿(引用上方状态色,换配色时只需改状态色一处) */
+  --color-app-glow-focus: var(--color-app-primary);
+  --color-app-glow-break: var(--color-app-break);
+
+  /* 动画:呼吸发光(6 秒周期)/ 淡入上移(0.3 秒) */
+  --animate-breathe: breathe 6s ease-in-out infinite;
+  --animate-fade-in-up: fade-in-up 0.3s ease-out both;
+
+  /* 呼吸发光:光晕在小和大之间循环;
+     发光色从元素上的 --glow-color 取(默认专注红),配合 .breathe-focus / .breathe-break 使用 */
+  @keyframes breathe {
+    0%,
+    100% {
+      box-shadow: 0 0 8px 0 color-mix(in srgb, var(--glow-color, var(--color-app-glow-focus)) 35%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 24px 6px color-mix(in srgb, var(--glow-color, var(--color-app-glow-focus)) 60%, transparent);
+    }
+  }
+
+  /* 淡入上移:元素从下方 8px 处淡入出现。
+     to 帧刻意不写 transform:fill both 只锁定 keyframes 中出现的属性,
+     动画结束后元素的 transform(如悬停上浮 hover:-translate-y-*)可正常接管 */
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+@layer components {
+  /* 呼吸发光的语义用法:专注阶段红色光晕 / 休息阶段绿色光晕 */
+  .breathe-focus {
+    --glow-color: var(--color-app-glow-focus);
+    animation: var(--animate-breathe);
+  }
+  .breathe-break {
+    --glow-color: var(--color-app-glow-break);
+    animation: var(--animate-breathe);
+  }
+
+  /* 状态光晕卡片:精致卡片底子(与 .card-refined 相同的多层柔和阴影)
+     + 第四层状态光晕,强度由 --glow-strength 控制(空闲时 0%,不可见)。
+     .glow-card-focus(专注红)/ .glow-card-break(休息绿)只注入光晕变量,
+     变量变化驱动 box-shadow 计算值变化,由 transition 实现状态切换的平滑渐变 */
+  .glow-card {
+    background: var(--color-app-card);
+    border: 1px solid var(--color-app-card-border);
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.04),
+      0 4px 8px -2px rgb(0 0 0 / 0.06),
+      0 12px 24px -6px rgb(0 0 0 / 0.08),
+      0 0 28px 2px
+        color-mix(
+          in srgb,
+          var(--glow-color, var(--color-app-glow-focus)) var(--glow-strength, 0%),
+          transparent
+        );
+    transition: box-shadow 0.5s ease;
+  }
+  .glow-card-focus {
+    --glow-color: var(--color-app-glow-focus);
+    --glow-strength: 30%;
+  }
+  .glow-card-break {
+    --glow-color: var(--color-app-glow-break);
+    --glow-strength: 30%;
+  }
+
+  /* 精致卡片:纯白背景 + 浅灰边框 + 多层柔和阴影(层次感与立体感);
+     圆角不在此定义,按需配合 Tailwind 圆角类使用 */
+  .card-refined {
+    background: var(--color-app-card);
+    border: 1px solid var(--color-app-card-border);
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.04),
+      0 4px 8px -2px rgb(0 0 0 / 0.06),
+      0 12px 24px -6px rgb(0 0 0 / 0.08);
+  }
+}
